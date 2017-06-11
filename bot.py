@@ -4,6 +4,7 @@ import fbchat
 import os
 import traceback
 import logging
+import sys
 
 def array_safe_get(arr, index):
     try:
@@ -48,9 +49,18 @@ class CubeBot(fbchat.Client):
             return "No room lists here! Tell the bot admin to add some."
         return '\n'.join(roomstrings)
 
-    def echo_message(self, author_id, entity_id, message, is_user=True):
+    def echo_message(self, author_id, entity_id, message, metadata, is_user=True):
+
         if str(author_id) != str(self.uid):
-            self.send(entity_id, message, is_user)
+            attachment_ids = []
+
+            if 'attachments' in metadata['delta']:
+                attachment_ids = [attachment['id'] for attachment in metadata['delta']['attachments']]
+
+            self.send(entity_id, message, is_user, image_id=array_safe_get(attachment_ids,0))
+
+            for attachment_id in attachment_ids[1:]:
+                self.send(entity_id, "", is_user, image_id=attachment_id)
 
     def add_room_group(self, author_id, room_id, group_to_join=None):
         self.logger.info("add to room group {}".format(group_to_join))
@@ -73,10 +83,13 @@ class CubeBot(fbchat.Client):
 
     def parse_message(self, author_id, message, metadata, replyid, is_user):
         if not message.startswith('!'):
+            real_author_name = self.getUserInfo(author_id)['name']
+
             for group in self.room_groups:
                 if replyid in group:
-                    for room in group:
-                        self.echo_message(author_id, replyid, message, is_user)
+                    for room in group - {replyid}:
+                        self.echo_message(author_id, room,
+                            "{} said:\n{}".format(real_author_name, message), metadata, is_user)
 
 
         fields = message[1:].split(" ")
@@ -90,6 +103,11 @@ class CubeBot(fbchat.Client):
             self.list_rooms(replyid, is_user)
 
     def on_message(self, mid, author_id, author_name, message, metadata):
+        self.logger.debug("==========================================")
+        self.logger.debug("{}: {}".format(author_id, message))
+        self.logger.debug("metadata: {}".format(metadata))
+
+
         self.markAsDelivered(author_id, mid) #mark delivered
         self.markAsRead(author_id) #mark read
 
@@ -100,6 +118,8 @@ class CubeBot(fbchat.Client):
 if __name__ == "__main__":
 
     admins = os.environ["BOT_ADMINS"].split(" ")
+    logging.basicConfig(stream=sys.stdout)
+    logging.getLogger("client").setLevel(logging.CRITICAL)
 
     bot = CubeBot(os.environ["BOT_USERNAME"], os.environ["BOT_PASSWORD"], admin_ids=admins, debug=False)
     bot.listen()
