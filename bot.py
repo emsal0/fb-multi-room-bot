@@ -18,7 +18,7 @@ class CubeBot(fbchat.Client):
     admin_only_commands = {'addroom'}
 
     def __init__(self,email, password, debug=True, user_agent=None, admin_ids=None):
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('CubeBot')
         self.logger.setLevel(logging.DEBUG)
 
         if admin_ids is None:
@@ -82,14 +82,19 @@ class CubeBot(fbchat.Client):
         self.send(roomid, self.roomlist_to_str(), is_user) 
 
     def parse_message(self, author_id, message, metadata, replyid, is_user):
+        self.logger.debug("parse_message replyid={} is_user={}".format(replyid, is_user))
         if not message.startswith('!'):
             real_author_name = self.getUserInfo(author_id)['name']
 
-            for group in self.room_groups:
-                if replyid in group:
-                    for room in group - {replyid}:
-                        self.echo_message(author_id, room,
-                            "{} said:\n{}".format(real_author_name, message), metadata, is_user)
+            if is_user:
+                self.echo_message(author_id, replyid,
+                    "{} said:\n{}".format(real_author_name, message), metadata, is_user)
+            else:
+                for group in self.room_groups:
+                    if replyid in group:
+                        for room in group - {replyid}:
+                            self.echo_message(author_id, room,
+                                "{} said:\n{}".format(real_author_name, message), metadata, is_user)
 
 
         fields = message[1:].split(" ")
@@ -106,7 +111,6 @@ class CubeBot(fbchat.Client):
         self.logger.debug("==========================================")
         self.logger.debug("{}: {}".format(author_id, message))
         self.logger.debug("metadata: {}".format(metadata))
-
 
         self.markAsDelivered(author_id, mid) #mark delivered
         self.markAsRead(author_id) #mark read
